@@ -40,8 +40,11 @@ class KokoroServiceManager {
 
   getAssets() {
     const dir = process.env.KOKORO_MODEL_DIR || this.getModelRoot();
+    const modelName = fs.existsSync(dir)
+      ? fs.readdirSync(dir).find(name => /^kokoro-v1\.1-zh\.(?:int8|fp16)\.onnx$/.test(name))
+      : null;
     return {
-      model: process.env.KOKORO_MODEL_PATH || fs.readdirSync(dir).find(name => /^kokoro-v1\.1-zh\.(?:int8|fp16)\.onnx$/.test(name)) && path.join(dir, fs.readdirSync(dir).find(name => /^kokoro-v1\.1-zh\.(?:int8|fp16)\.onnx$/.test(name))),
+      model: process.env.KOKORO_MODEL_PATH || (modelName ? path.join(dir, modelName) : null),
       voices: process.env.KOKORO_VOICES_PATH || path.join(dir, 'voices-v1.1-zh.bin'),
       config: process.env.KOKORO_CONFIG_PATH || path.join(dir, 'config.json'),
     };
