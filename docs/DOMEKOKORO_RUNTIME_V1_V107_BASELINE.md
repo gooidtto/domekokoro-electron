@@ -204,3 +204,16 @@ For future upgrades, additional ONNX variants can be added under `onnx/` without
 The upstream `Kokoro-82M-v1.1-zh-ONNX` repository itself uses `onnx/` and `voices/` as separate directories and currently publishes multiple ONNX quantization variants plus a large set of Chinese voice files. citeturn0search5turn0search2
 
 The local runtime intentionally does not commit model binaries or voice binaries to GitHub. These assets should be installed alongside the application or supplied through a model/voice asset package.
+
+### v1.1 voice bundle compatibility
+
+The uploaded `voices-v1.1-zh.bin` is the official-style 53.8 MB v1.1-zh voice bundle used by the `kokoro-onnx` implementation; it contains 103 voices. It is **not** the per-voice `voices/{voice}.bin` layout consumed directly by the current `kokoro-js-zh` / Transformers.js runtime. The current JS runtime therefore keeps the per-voice files under `voices/` as its canonical local format.
+
+This distinction is intentional:
+
+- `voices-v1.1-zh.bin` can be retained as a source/archive asset for the kokoro-onnx/Rust runtime path.
+- The Electron Chinese JS runtime expects individual files such as `voices/zf_001.bin` and discovers them dynamically.
+- The runtime no longer uses the obsolete eight-voice names such as `zf_xiaoxiao` for v1.1-zh.
+- The remote fallback manifest is aligned to the current 103-voice v1.1-zh set.
+
+The v1.1 bundle format is bincode-based rather than a normal NumPy ZIP archive, so it should not be renamed or treated as an individual Transformers.js voice file. citeturn3view0turn1search1
