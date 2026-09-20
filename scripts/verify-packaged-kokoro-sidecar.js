@@ -131,7 +131,7 @@ async function main() {
     console.log('voices:', voicesList.length, 'test voice:', voice);
 
     const synthesis = await request('POST', '/v1/audio/speech', {
-      text: '这是跨平台 PyInstaller 打包后的 Kokoro v1.1 中文端到端冒烟测试。',
+      input: '这是跨平台 PyInstaller 打包后的 Kokoro v1.1 中文端到端冒烟测试。',
       voice,
       speed: 1.0,
     });
