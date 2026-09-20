@@ -413,3 +413,19 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 ---
 
 **ℹ️ Note:** This application runs entirely locally after the initial model download. No external TTS services or API keys are required.
+
+
+## BookNote 本地 TTS 后端（P0）
+
+Dome Kokoro v2 构建后会在本机启动一个仅监听 `127.0.0.1` 的本地 TTS 服务：
+
+- Health: `http://127.0.0.1:18451/api/v1/health`
+- Voices: `GET /api/v1/voices`
+- Synthesize: `POST /api/v1/synthesize`
+- Engine: `kokoro-onnx`
+- Default model: `kokoro-v1.1-zh.int8.onnx`
+- Default Chinese voice: `zf_001`
+
+BookNote 不需要安装 Python、保存 Python 路径或知道模型路径。桌面应用负责启动后端；BookNote 只需轮询 health endpoint 并验证 `service=domekokoro-tts`、`apiVersion=1`、`engine=kokoro-onnx`。
+
+后端模型文件默认位于用户缓存目录的 `domekokoro/models` 下。详见 `docs/BOOKNOTE-LOCAL-TTS.md`。
