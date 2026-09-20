@@ -60,6 +60,9 @@ jobs:
           test -s build/models/Kokoro-82M-v1.1-zh/int8/kokoro-v1.1-zh.int8.onnx
           test -s build/models/Kokoro-82M-v1.1-zh/int8/voices-v1.1-zh.bin
 
+      - name: Smoke-test packaged PyInstaller sidecar
+        run: npm run test:tts-runtime-v2:packaged
+
       - name: Build Electron package
         run: npm run pack
 
