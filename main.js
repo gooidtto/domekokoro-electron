@@ -6,8 +6,6 @@ const { spawn } = require('child_process');
 
 // Now safe to import electron and other modules
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
-const pLimit = require('p-limit').default;
-const limit = pLimit(8); // Try 8, increase if stable
 
 // Import kokoro-js AFTER environment variables are set
 const { TextSplitterStream } = require('kokoro-js');
@@ -108,7 +106,7 @@ ipcMain.handle('run-kokoro', async (_event, text, outFile, voice) => {
 
 ipcMain.handle('run-kokoro-multi', async (_event, text, outFile, voice) => {
   try {
-    const chunks = await splitText(text, 350); // Adjust chunk size as needed
+    const chunks = await splitText(text, 300); // V10.7-compatible guardrail: keep each inference <= 300 chars
     const audioBuffers = [];
 
     // Estimate processing time based on text length for progress updates
@@ -138,8 +136,7 @@ ipcMain.handle('run-kokoro-multi', async (_event, text, outFile, voice) => {
             return null;
           }
 
-          const ttsInstance = await ttsManager.createNewInstance();
-          const audio = await ttsInstance.generate(normalizedChunk, { voice });
+          // Runtime v1 serializes inference inside ttsManager; do not create parallel model instances.\n          const audio = await ttsManager.generateAudio(normalizedChunk, voice);
           const wav = await audio.toWav();
           return Buffer.from(wav);
         })
