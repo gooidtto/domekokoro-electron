@@ -165,3 +165,42 @@ KOKORO_ALLOW_REMOTE_FALLBACK=1
 The existing remote path remains available when no usable local model is detected.
 
 The two user-supplied ONNX files are intentionally not committed to GitHub: each is over 100 MB, so they should remain external/local model assets unless Git LFS is deliberately introduced.
+
+
+## Standard local asset hierarchy
+
+The local model package is standardized around the upstream Transformers.js layout:
+
+```text
+models/
+└── Kokoro-82M-v1.1-zh-ONNX/
+    ├── config.json
+    ├── tokenizer.json
+    ├── tokenizer_config.json
+    ├── onnx/
+    │   ├── model_int8.onnx
+    │   ├── model_q4.onnx
+    │   ├── model_q4f16.onnx
+    │   ├── model_fp16.onnx
+    │   └── model.onnx
+    └── voices/
+        ├── zf_001.bin
+        ├── zf_002.bin
+        ├── ...
+        ├── zm_009.bin
+        └── ...
+```
+
+The `onnx/` and `voices/` directories are deliberately separated:
+
+- `onnx/` contains interchangeable model/precision variants.
+- `voices/` contains interchangeable voice/style assets.
+- Upgrading the ONNX model does not require changing the voice directory.
+- Adding new compatible voices does not require changing the ONNX model.
+- The runtime discovers local `voices/*.bin` dynamically instead of maintaining a fixed eight-voice list when local assets are present.
+
+For future upgrades, additional ONNX variants can be added under `onnx/` without changing the application directory contract. The selected variant should be controlled by runtime configuration rather than by renaming files.
+
+The upstream `Kokoro-82M-v1.1-zh-ONNX` repository itself uses `onnx/` and `voices/` as separate directories and currently publishes multiple ONNX quantization variants plus a large set of Chinese voice files. citeturn0search5turn0search2
+
+The local runtime intentionally does not commit model binaries or voice binaries to GitHub. These assets should be installed alongside the application or supplied through a model/voice asset package.
