@@ -21,7 +21,9 @@
     "build:linux": "electron-builder --linux",
     "dist": "npm run build",
     "pack": "electron-builder --dir",
-    "prepare": "husky"
+    "prepare": "husky",
+    "backend:install:win": "powershell -ExecutionPolicy Bypass -File backend/install-backend.ps1",
+    "backend:install": "bash backend/install-backend.sh"
   },
   "keywords": [
     "electron",
@@ -95,6 +97,8 @@
       "index.html",
       "scripts/**/*",
       "styles/**/*",
+      "backend/**/*",
+      "assets/**/*",
       "node_modules/**/*",
       "package.json"
     ],
@@ -161,6 +165,15 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
-    }
+    },
+    "extraResources": [
+      {
+        "from": "backend",
+        "to": "backend",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
   }
 }
