@@ -26,7 +26,8 @@
     "test:tts-runtime-v1:20": "KOKORO_V1_TEST_COUNT=20 node scripts/verify-chinese-kokoro-runtime.js",
     "test:tts-runtime-v2": "node scripts/verify-kokoro-onnx-sidecar.js",
     "test:tts-runtime-v2:health": "node scripts/verify-kokoro-onnx-sidecar.js --health-only",
-    "prepare:distribution": "node scripts/prepare-distribution.js"
+    "prepare:distribution": "node scripts/prepare-distribution.js",
+    "test:tts-runtime-v2:packaged": "node scripts/verify-packaged-kokoro-sidecar.js"
   },
   "keywords": [
     "electron",
