@@ -1,0 +1,7 @@
+{
+  "name": "@gooidtto/domekokoro-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local Kokoro ONNX backend for Dome Kokoro TTS",
+  "type": "module"
+}
