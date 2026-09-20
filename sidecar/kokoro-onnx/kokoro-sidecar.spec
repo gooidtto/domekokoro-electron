@@ -3,7 +3,7 @@ from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
-ROOT = Path(__file__).resolve().parent
+ROOT = (Path.cwd() / "sidecar" / "kokoro-onnx").resolve()
 
 datas = []
 binaries = []
