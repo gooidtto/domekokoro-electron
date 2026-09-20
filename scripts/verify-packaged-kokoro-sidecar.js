@@ -121,7 +121,8 @@ async function main() {
     if (voicesResponse.status !== 200) {
       throw new Error('voice enumeration failed: HTTP ' + voicesResponse.status);
     }
-    const voicesList = JSON.parse(voicesResponse.body.toString('utf8'));
+    const voicesPayload = JSON.parse(voicesResponse.body.toString('utf8'));
+    const voicesList = Array.isArray(voicesPayload) ? voicesPayload : voicesPayload.voices;
     if (!Array.isArray(voicesList) || voicesList.length === 0) {
       throw new Error('packaged sidecar returned no voices');
     }
