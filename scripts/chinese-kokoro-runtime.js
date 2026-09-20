@@ -151,7 +151,6 @@ class ChineseKokoroRuntime {
 
     this.loading = (async () => {
       await ensureEspeakWasm();
-      await ensureVoices();
 
       const { env } = await import('@huggingface/transformers');
       env.remoteHost = HF_ENDPOINT;
@@ -163,8 +162,12 @@ class ChineseKokoroRuntime {
         env.allowLocalModels = true;
         env.localModelPath = path.dirname(status.dir);
         env.allowRemoteModels = process.env.KOKORO_ALLOW_REMOTE_FALLBACK === '1';
+        if (!voicesReady()) {
+          throw new Error(`Local Kokoro model has no voice .bin files in ${voiceDir()}`);
+        }
         console.log('[kokoro-zh] using local model:', status.modelFile);
       } else {
+        await ensureVoices();
         env.allowLocalModels = true;
         env.allowRemoteModels = true;
         console.log('[kokoro-zh] using remote model:', REMOTE_MODEL_ID);
