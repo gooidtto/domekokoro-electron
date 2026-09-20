@@ -3,6 +3,7 @@ const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
+const http = require('http');
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 
 const {
@@ -24,6 +25,91 @@ const settingsManager = createSettingsManager({
 });
 
 const kokoroService = new KokoroServiceManager();
+const OPENAI_API_HOST = process.env.KOKORO_API_HOST || '127.0.0.1';
+const OPENAI_API_PORT = Number(process.env.KOKORO_API_PORT || 17860);
+let apiServer = null;
+
+function sendJson(res, status, payload) {
+  const body = Buffer.from(JSON.stringify(payload));
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Content-Length': body.length,
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+  });
+  res.end(body);
+}
+
+function startOpenAICompatibleServer() {
+  apiServer = http.createServer(async (req, res) => {
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      });
+      return res.end();
+    }
+
+    try {
+      if (req.method === 'GET' && req.url === '/health') {
+        return sendJson(res, 200, { status: 'ok', engine: 'kokoro-v1.1-zh', ready: Boolean(kokoroService.process) });
+      }
+
+      if (req.method === 'GET' && req.url === '/v1/models') {
+        return sendJson(res, 200, {
+          object: 'list',
+          data: [{
+            id: 'kokoro-v1.1-zh',
+            object: 'model',
+            owned_by: 'domekokoro',
+          }],
+        });
+      }
+
+      if (req.method === 'GET' && req.url === '/v1/voices') {
+        await ensureKokoroReady();
+        const voices = await kokoroApi.listVoices({ port: kokoroService.port });
+        return sendJson(res, 200, { object: 'list', voices });
+      }
+
+      if (req.method === 'POST' && req.url === '/v1/audio/speech') {
+        const chunks = [];
+        for await (const chunk of req) chunks.push(chunk);
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+        const input = typeof body.input === 'string' ? body.input : '';
+        if (!input.trim()) return sendJson(res, 400, { error: { message: 'input is required' } });
+        if (input.length > 300) return sendJson(res, 400, { error: { message: 'input exceeds the 300-character synthesis limit; split the request.' } });
+
+        await ensureKokoroReady();
+        const wav = await kokoroApi.synthesize({
+          text: input,
+          voice: body.voice || 'zf_001',
+          speed: Number(body.speed || 1.0),
+          port: kokoroService.port,
+        });
+        res.writeHead(200, {
+          'Content-Type': 'audio/wav',
+          'Content-Length': wav.length,
+          'Cache-Control': 'no-store',
+          'Access-Control-Allow-Origin': '*',
+        });
+        return res.end(wav);
+      }
+
+      return sendJson(res, 404, { error: { message: 'Not found' } });
+    } catch (err) {
+      console.error('[openai-api]', err);
+      return sendJson(res, 500, { error: { message: err.message } });
+    }
+  });
+
+  apiServer.on('error', err => console.error('[openai-api] server error:', err));
+  apiServer.listen(OPENAI_API_PORT, OPENAI_API_HOST, () => {
+    console.log(`[openai-api] listening on http://${OPENAI_API_HOST}:${OPENAI_API_PORT}`);
+  });
+}
 
 function createWindow() {
   const winBounds = settingsManager.getWindowBounds({ width: 500, height: 500 });
@@ -47,10 +133,14 @@ app.whenReady().then(async () => {
   } catch (err) {
     console.error('[kokoro] sidecar startup failed:', err);
   }
+  startOpenAICompatibleServer();
   createWindow();
 });
 
-app.on('before-quit', () => kokoroService.stop());
+app.on('before-quit', () => {
+  if (apiServer) apiServer.close();
+  kokoroService.stop();
+});
 
 ipcMain.handle('choose-output-file', async () => {
   const result = await dialog.showSaveDialog({
