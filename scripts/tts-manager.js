@@ -1,25 +1,29 @@
 const { KokoroTTS } = require('kokoro-js');
 
 /**
- * TTS configuration constants
+ * DomeKokoro Runtime v1 baseline
+ *
+ * Derived from DomeAI V10.7 local Kokoro runtime fixes:
+ * - single cached model instance
+ * - serialized inference queue to prevent native-memory peak stacking
+ * - 300-character per-request guardrail
+ *
+ * The original V10.7 Docker/Next.js fixes are documented separately because
+ * this Electron runtime has no Docker Compose build-arg layer or Next.js webpack
+ * server bundle.
  */
 const FIXED_MODEL_ID = 'onnx-community/Kokoro-82M-ONNX';
-const FIXED_DTYPE = 'fp16'; // q8 should be avoided on M1/M2 Macs due to timing issues
+const FIXED_DTYPE = 'fp16';
+const MAX_SYNTHESIS_TEXT = 300;
 
-/**
- * TTS Manager class to handle TTS instance loading, caching, and management
- */
 class TTSManager {
   constructor() {
     this.cachedTTS = null;
     this.modelId = FIXED_MODEL_ID;
     this.dtype = FIXED_DTYPE;
+    this.synthesisQueue = Promise.resolve();
   }
 
-  /**
-   * Load TTS instance (with caching)
-   * @returns {Promise<KokoroTTS>} TTS instance
-   */
   async loadTTS() {
     if (!this.cachedTTS) {
       this.cachedTTS = await KokoroTTS.from_pretrained(this.modelId, {
@@ -29,37 +33,19 @@ class TTSManager {
     return this.cachedTTS;
   }
 
-  /**
-   * Initialize TTS and return success status
-   * @param {Function} onProgress - Optional progress callback for model download
-   * @returns {Promise<boolean>} True if initialization successful
-   */
   async initialize(onProgress) {
     try {
-      if (onProgress) {
-        onProgress('Initializing TTS system...');
-      }
-
+      onProgress?.('Initializing TTS system...');
       await this.loadTTS();
-
-      if (onProgress) {
-        onProgress('TTS system ready!');
-      }
-
+      onProgress?.('TTS system ready!');
       return true;
     } catch (err) {
       console.error('Kokoro init failed:', err);
-      if (onProgress) {
-        onProgress('Failed to initialize TTS system.');
-      }
+      onProgress?.('Failed to initialize TTS system.');
       return false;
     }
   }
 
-  /**
-   * Get available voices from TTS instance
-   * @returns {Promise<Array>} Array of available voices
-   */
   async getVoices() {
     try {
       const tts = await this.loadTTS();
@@ -71,89 +57,74 @@ class TTSManager {
   }
 
   /**
-   * Generate audio for text with specified voice
-   * @param {string} text - Text to generate audio for
-   * @param {string} voice - Voice to use
-   * @returns {Promise<object>} Generated audio object
+   * Serialize all batch inference through one native ONNX execution.
+   * The V10.7 production fix showed that parallel Kokoro instances can
+   * multiply native memory peaks and trigger swap/OOM on low-memory hosts.
    */
-  async generateAudio(text, voice) {
-    const tts = await this.loadTTS();
-    return await tts.generate(text, { voice });
+  generateAudio(text, voice) {
+    const normalized = typeof text === 'string' ? text.trim() : '';
+    if (!normalized) {
+      return Promise.reject(new Error('TTS text is empty'));
+    }
+    if (normalized.length > MAX_SYNTHESIS_TEXT) {
+      return Promise.reject(
+        new Error(`TTS text is too long (maximum ${MAX_SYNTHESIS_TEXT} characters per synthesis)`)
+      );
+    }
+
+    const run = this.synthesisQueue.then(async () => {
+      const tts = await this.loadTTS();
+      return tts.generate(normalized, { voice });
+    });
+
+    // Keep the queue alive after a failed request.
+    this.synthesisQueue = run.catch(() => undefined);
+    return run;
   }
 
-  /**
-   * Generate audio buffer (WAV format) for text
-   * @param {string} text - Text to generate audio for
-   * @param {string} voice - Voice to use
-   * @returns {Promise<Buffer>} WAV audio buffer
-   */
   async generateAudioBuffer(text, voice) {
     const audio = await this.generateAudio(text, voice);
-    const wav = await audio.toWav();
-    return Buffer.from(wav);
+    return Buffer.from(await audio.toWav());
   }
 
   /**
-   * Create a new TTS instance (for parallel processing)
-   * @returns {Promise<KokoroTTS>} New TTS instance
+   * Kept for API compatibility. Runtime v1 deliberately does not create
+   * additional model instances: doing so defeats memory serialization.
    */
   async createNewInstance() {
-    return await KokoroTTS.from_pretrained(this.modelId, {
-      dtype: this.dtype,
-    });
+    return this.loadTTS();
   }
 
-  /**
-   * Generate preview audio for a voice
-   * @param {string} voice - Voice to preview
-   * @param {string} previewText - Text to use for preview (optional)
-   * @returns {Promise<object>} Generated preview audio
-   */
   async generatePreview(voice, previewText = 'This is a sample of the selected voice.') {
-    return await this.generateAudio(previewText, voice);
+    return this.generateAudio(previewText, voice);
   }
 
-  /**
-   * Clear cached TTS instance (force reload on next use)
-   */
   clearCache() {
     this.cachedTTS = null;
   }
 
-  /**
-   * Get TTS model configuration
-   * @returns {object} Configuration object
-   */
   getConfig() {
     return {
       modelId: this.modelId,
       dtype: this.dtype,
+      maxSynthesisText: MAX_SYNTHESIS_TEXT,
+      synthesisMode: 'serialized-single-instance',
     };
   }
 
-  /**
-   * Update TTS configuration
-   * @param {string} modelId - New model ID (optional)
-   * @param {string} dtype - New dtype (optional)
-   */
   updateConfig(modelId, dtype) {
-    if (modelId) {
-      this.modelId = modelId;
-    }
-    if (dtype) {
-      this.dtype = dtype;
-    }
-    // Clear cache to force reload with new config
+    if (modelId) this.modelId = modelId;
+    if (dtype) this.dtype = dtype;
     this.clearCache();
   }
 }
 
-// Create a singleton instance
 const ttsManager = new TTSManager();
 
 module.exports = {
   TTSManager,
-  ttsManager, // Singleton instance
+  ttsManager,
   FIXED_MODEL_ID,
   FIXED_DTYPE,
+  MAX_SYNTHESIS_TEXT,
 };
