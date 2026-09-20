@@ -10,13 +10,28 @@ class KokoroServiceManager {
     this.host = options.host || '127.0.0.1';
     this.port = Number(options.port || process.env.KOKORO_PORT || DEFAULT_PORT);
     this.python = options.python || process.env.KOKORO_PYTHON || 'python3';
+    this.packaged = Boolean(process.resourcesPath && process.defaultApp === false);
     this.projectRoot = options.projectRoot || path.resolve(__dirname, '../..');
     this.process = null;
     this.ready = null;
   }
 
   getSidecarDir() {
+    if (this.packaged) return path.join(process.resourcesPath, 'kokoro-sidecar');
     return path.join(this.projectRoot, 'sidecar', 'kokoro-onnx');
+  }
+
+  getModelRoot() {
+    if (this.packaged) return path.join(process.resourcesPath, 'models', 'Kokoro-82M-v1.1-zh', 'int8');
+    return this.getDefaultModelDir();
+  }
+
+  getExecutable() {
+    if (!this.packaged) {
+      return { command: this.python, args: [path.join(this.getSidecarDir(), 'app.py')] };
+    }
+    const executable = process.platform === 'win32' ? 'kokoro-sidecar.exe' : 'kokoro-sidecar';
+    return { command: path.join(this.getSidecarDir(), executable), args: [] };
   }
 
   getDefaultModelDir() {
@@ -24,7 +39,7 @@ class KokoroServiceManager {
   }
 
   getAssets() {
-    const dir = process.env.KOKORO_MODEL_DIR || this.getDefaultModelDir();
+    const dir = process.env.KOKORO_MODEL_DIR || this.getModelRoot();
     return {
       model: process.env.KOKORO_MODEL_PATH || path.join(dir, 'kokoro-v1.1-zh.int8.onnx'),
       voices: process.env.KOKORO_VOICES_PATH || path.join(dir, 'voices-v1.1-zh.bin'),
@@ -37,18 +52,20 @@ class KokoroServiceManager {
 
     this.ready = (async () => {
       const assets = this.getAssets();
-      for (const key of Object.keys(assets)) {
+      for (const key of ['model', 'voices']) {
         if (!fs.existsSync(assets[key])) throw new Error('Kokoro asset missing: ' + key + '=' + assets[key]);
       }
-
-      this.process = spawn(this.python, [
-        path.join(this.getSidecarDir(), 'app.py'),
+      const executable = this.getExecutable();
+      const args = [
+        ...executable.args,
         '--host', this.host,
         '--port', String(this.port),
         '--model', assets.model,
         '--voices', assets.voices,
-        '--config', assets.config,
-      ], {
+      ];
+      if (fs.existsSync(assets.config)) args.push('--config', assets.config);
+
+      this.process = spawn(executable.command, args, {
         cwd: this.getSidecarDir(),
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: true,
