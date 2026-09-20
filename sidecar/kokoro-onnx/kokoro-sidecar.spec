@@ -1,5 +1,9 @@
 # PyInstaller specification for the standalone Kokoro sidecar.
-from pathlib import Path\n\nfrom PyInstaller.utils.hooks import collect_all, collect_submodules\n\nROOT = Path(__file__).resolve().parent
+from pathlib import Path
+
+from PyInstaller.utils.hooks import collect_all, collect_submodules
+
+ROOT = Path(__file__).resolve().parent
 
 datas = []
 binaries = []
