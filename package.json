@@ -47,7 +47,10 @@
   "dependencies": {
     "electron-store": "^11.0.2",
     "kokoro-js": "^1.2.1",
-    "p-limit": "^7.3.0"
+    "p-limit": "^7.3.0",
+    "kokoro-js-zh": "2.1.7",
+    "@huggingface/transformers": "3.8.1",
+    "onnxruntime-node": "1.29.0"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
