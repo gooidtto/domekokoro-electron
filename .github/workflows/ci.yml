@@ -22,7 +22,7 @@ jobs:
         uses: actions/setup-node@v6
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
+          cache: npm
 
       - name: Install dependencies
         run: npm ci
@@ -51,34 +51,6 @@ jobs:
           path: coverage/
           retention-days: 30
 
-  build-test:
-    name: Build Test
-    runs-on: ${{ matrix.os }}
-    needs: test
-
-    strategy:
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build application (test)
-        run: npm run pack
-
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v7
-        with:
-          name: build-test-${{ matrix.os }}
-          path: dist/
-          retention-days: 7
+# Desktop packaging is intentionally separated into build-desktop.yml.
+# That workflow installs Python, packages the sidecar, downloads the pinned
+# Kokoro v1.1-zh INT8 assets, and produces platform artifacts.
