@@ -23,7 +23,9 @@
     "pack": "electron-builder --dir",
     "prepare": "husky",
     "test:tts-runtime-v1": "node scripts/verify-chinese-kokoro-runtime.js",
-    "test:tts-runtime-v1:20": "KOKORO_V1_TEST_COUNT=20 node scripts/verify-chinese-kokoro-runtime.js"
+    "test:tts-runtime-v1:20": "KOKORO_V1_TEST_COUNT=20 node scripts/verify-chinese-kokoro-runtime.js",
+    "test:tts-runtime-v2": "node scripts/verify-kokoro-onnx-sidecar.js",
+    "test:tts-runtime-v2:health": "node scripts/verify-kokoro-onnx-sidecar.js --health-only"
   },
   "keywords": [
     "electron",
@@ -37,7 +39,7 @@
     "email": "40339226+davealaw@users.noreply.github.com"
   },
   "license": "MIT",
-  "description": "A user-friendly Electron-based GUI for local neural text-to-speech using kokoro-js",
+  "description": "Electron desktop client for local Kokoro v1.1-zh TTS via a Python kokoro-onnx sidecar",
   "repository": {
     "type": "git",
     "url": "https://github.com/davealaw/kokoro-electron.git"
@@ -47,13 +49,7 @@
     "url": "https://github.com/davealaw/kokoro-electron/issues"
   },
   "dependencies": {
-    "electron-store": "^11.0.2",
-    "kokoro-js": "^1.2.1",
-    "p-limit": "^7.3.0",
-    "kokoro-js-zh": "2.1.7",
-    "@huggingface/transformers": "3.8.1",
-    "onnxruntime-node": "1.29.0",
-    "espeak-ng": "1.0.2"
+    "electron-store": "^11.0.2"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
