@@ -20,6 +20,7 @@ const {
 } = require('./scripts/text-utils');
 const { mergeWavBuffers } = require('./scripts/audio-utils');
 const { ttsManager } = require('./scripts/tts-manager');
+const { chineseKokoroRuntime } = require('./scripts/chinese-kokoro-runtime');
 const { createSettingsManager } = require('./scripts/settings-manager');
 
 // Initialize settings manager
@@ -75,6 +76,44 @@ ipcMain.handle('initialize-kokoro', async event => {
 
 ipcMain.handle('list-kokoro-voices', async () => {
   return await ttsManager.getVoices();
+});
+
+ipcMain.handle('initialize-kokoro-zh', async event => {
+  try {
+    event.sender.send('kokoro-zh-init-progress', { message: 'Initializing Chinese Kokoro runtime...' });
+    await chineseKokoroRuntime.load();
+    event.sender.send('kokoro-zh-init-progress', { message: 'Chinese Kokoro runtime ready!' });
+    return true;
+  } catch (err) {
+    console.error('Chinese Kokoro init failed:', err);
+    event.sender.send('kokoro-zh-init-progress', { message: 'Failed to initialize Chinese Kokoro runtime.' });
+    return false;
+  }
+});
+
+ipcMain.handle('list-kokoro-zh-voices', async () => {
+  return chineseKokoroRuntime.getVoices();
+});
+
+ipcMain.handle('run-kokoro-zh', async (_event, text, outFile, voice) => {
+  try {
+    if (!outFile || outFile.trim() === '') {
+      outFile = defaultOutputPath;
+    }
+
+    const normalizedText = normalizeForTTS(text);
+    const audio = await chineseKokoroRuntime.generateAudio(normalizedText, voice);
+    await audio.save(outFile);
+    settingsManager.saveSessionState(text, voice, outFile);
+    return outFile;
+  } catch (err) {
+    console.error('Chinese Kokoro generation failed:', err);
+    throw new Error('Chinese Kokoro error: ' + err.message, { cause: err });
+  }
+});
+
+ipcMain.handle('get-kokoro-zh-config', async () => {
+  return chineseKokoroRuntime.getConfig();
 });
 
 const defaultOutputPath = path.join(app.getPath('documents'), 'kokoro-output.wav');
