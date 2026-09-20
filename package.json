@@ -21,7 +21,9 @@
     "build:linux": "electron-builder --linux",
     "dist": "npm run build",
     "pack": "electron-builder --dir",
-    "prepare": "husky"
+    "prepare": "husky",
+    "test:tts-runtime-v1": "node scripts/verify-chinese-kokoro-runtime.js",
+    "test:tts-runtime-v1:20": "KOKORO_V1_TEST_COUNT=20 node scripts/verify-chinese-kokoro-runtime.js"
   },
   "keywords": [
     "electron",
