@@ -3,6 +3,9 @@ const { contextBridge, ipcRenderer } = require('electron');
 contextBridge.exposeInMainWorld('kokoroAPI', {
   getLastSettings: () => ipcRenderer.invoke('get-last-settings'),
   initializeKokoro: () => ipcRenderer.invoke('initialize-kokoro'),
+  getBackendHealth: () => ipcRenderer.invoke('tts-backend-health'),
+  getBackendVoices: () => ipcRenderer.invoke('tts-backend-voices'),
+  synthesizeWithBackend: request => ipcRenderer.invoke('tts-backend-synthesize', request),
   listVoices: () => ipcRenderer.invoke('list-kokoro-voices'),
   resetSettings: () => ipcRenderer.invoke('reset-settings'),
   readTextFile: () => ipcRenderer.invoke('read-text-file'),
