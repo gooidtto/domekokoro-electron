@@ -3,27 +3,18 @@ const fs = require('fs');
 const os = require('os');
 const crypto = require('crypto');
 const { spawn } = require('child_process');
-
-// Now safe to import electron and other modules
 const { app, BrowserWindow, ipcMain, dialog } = require('electron');
 
-// Import kokoro-js AFTER environment variables are set
-const { TextSplitterStream } = require('kokoro-js');
-
-// Import extracted utility modules
-const { isValidTextFile, getFileSize, readTextFile } = require('./scripts/file-utils');
 const {
   splitText,
-  tokenizeText,
   estimateProcessingTime,
   normalizeForTTS,
 } = require('./scripts/text-utils');
 const { mergeWavBuffers } = require('./scripts/audio-utils');
-const { ttsManager } = require('./scripts/tts-manager');
-const { chineseKokoroRuntime } = require('./scripts/chinese-kokoro-runtime');
 const { createSettingsManager } = require('./scripts/settings-manager');
+const { KokoroServiceManager } = require('./scripts/sidecar/kokoro-service-manager');
+const kokoroApi = require('./scripts/sidecar/kokoro-api-client');
 
-// Initialize settings manager
 const settingsManager = createSettingsManager({
   defaults: {
     lastModel: '',
@@ -32,26 +23,34 @@ const settingsManager = createSettingsManager({
   },
 });
 
+const kokoroService = new KokoroServiceManager();
+
 function createWindow() {
   const winBounds = settingsManager.getWindowBounds({ width: 500, height: 500 });
   const win = new BrowserWindow({
     ...winBounds,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-    },
+    webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
-
   win.loadFile('index.html');
-
-  // DevTools disabled in production
-
-  // Save size and position on close
-  win.on('close', () => {
-    settingsManager.saveWindowBounds(win.getBounds());
-  });
+  win.on('close', () => settingsManager.saveWindowBounds(win.getBounds()));
 }
 
-app.whenReady().then(createWindow);
+async function ensureKokoroReady() {
+  await kokoroService.start();
+  return kokoroApi.health({ port: kokoroService.port });
+}
+
+app.whenReady().then(async () => {
+  try {
+    await ensureKokoroReady();
+    console.log('[kokoro] sidecar ready');
+  } catch (err) {
+    console.error('[kokoro] sidecar startup failed:', err);
+  }
+  createWindow();
+});
+
+app.on('before-quit', () => kokoroService.stop());
 
 ipcMain.handle('choose-output-file', async () => {
   const result = await dialog.showSaveDialog({
@@ -59,7 +58,6 @@ ipcMain.handle('choose-output-file', async () => {
     defaultPath: 'kokoro-output.wav',
     filters: [{ name: 'WAV files', extensions: ['wav'] }],
   });
-
   if (!result.canceled && result.filePath) {
     settingsManager.set('lastOutput', result.filePath);
     return result.filePath;
@@ -67,75 +65,42 @@ ipcMain.handle('choose-output-file', async () => {
 });
 
 ipcMain.handle('initialize-kokoro', async event => {
-  const onProgress = message => {
-    event.sender.send('kokoro-init-progress', { message });
-  };
-
-  return await ttsManager.initialize(onProgress);
+  try {
+    event.sender.send('kokoro-init-progress', { message: 'Starting Kokoro v1.1-zh sidecar...' });
+    const health = await ensureKokoroReady();
+    event.sender.send('kokoro-init-progress', { message: 'Kokoro v1.1-zh ready.' });
+    return health;
+  } catch (err) {
+    console.error('Kokoro sidecar init failed:', err);
+    event.sender.send('kokoro-init-progress', { message: 'Failed to start Kokoro sidecar.' });
+    throw err;
+  }
 });
 
 ipcMain.handle('list-kokoro-voices', async () => {
-  return await ttsManager.getVoices();
+  await ensureKokoroReady();
+  return kokoroApi.listVoices({ port: kokoroService.port });
 });
 
-ipcMain.handle('initialize-kokoro-zh', async event => {
-  try {
-    event.sender.send('kokoro-zh-init-progress', { message: 'Initializing Chinese Kokoro runtime...' });
-    await chineseKokoroRuntime.load();
-    event.sender.send('kokoro-zh-init-progress', { message: 'Chinese Kokoro runtime ready!' });
-    return true;
-  } catch (err) {
-    console.error('Chinese Kokoro init failed:', err);
-    event.sender.send('kokoro-zh-init-progress', { message: 'Failed to initialize Chinese Kokoro runtime.' });
-    return false;
-  }
+ipcMain.handle('get-kokoro-config', async () => {
+  await ensureKokoroReady();
+  return kokoroApi.health({ port: kokoroService.port });
 });
-
-ipcMain.handle('list-kokoro-zh-voices', async () => {
-  return chineseKokoroRuntime.getVoices();
-});
-
-ipcMain.handle('run-kokoro-zh', async (_event, text, outFile, voice) => {
-  try {
-    if (!outFile || outFile.trim() === '') {
-      outFile = defaultOutputPath;
-    }
-
-    const normalizedText = normalizeForTTS(text);
-    const audio = await chineseKokoroRuntime.generateAudio(normalizedText, voice);
-    await audio.save(outFile);
-    settingsManager.saveSessionState(text, voice, outFile);
-    return outFile;
-  } catch (err) {
-    console.error('Chinese Kokoro generation failed:', err);
-    throw new Error('Chinese Kokoro error: ' + err.message, { cause: err });
-  }
-});
-
-ipcMain.handle('get-kokoro-zh-config', async () => {
-  return chineseKokoroRuntime.getConfig();
-});
-
-const defaultOutputPath = path.join(app.getPath('documents'), 'kokoro-output.wav');
 
 ipcMain.handle('run-kokoro', async (_event, text, outFile, voice) => {
   try {
-    // Use default output path if none is provided
-    if (!outFile || outFile.trim() === '') {
-      console.warn(`No output path provided. Using default: ${defaultOutputPath}`);
-      outFile = defaultOutputPath;
-    }
-
-    // Normalize text for TTS compatibility
+    await ensureKokoroReady();
     const normalizedText = normalizeForTTS(text);
-
-    // Generate audio via TTS manager
-    const audio = await ttsManager.generateAudio(normalizedText, voice);
-    await audio.save(outFile);
-
-    // Save current state
+    const wav = await kokoroApi.synthesize({
+      text: normalizedText,
+      voice: voice || 'zf_001',
+      port: kokoroService.port,
+    });
+    if (!outFile || !outFile.trim()) {
+      outFile = path.join(app.getPath('documents'), 'kokoro-output.wav');
+    }
+    fs.writeFileSync(outFile, wav);
     settingsManager.saveSessionState(text, voice, outFile);
-
     return outFile;
   } catch (err) {
     console.error('Kokoro generation failed:', err);
@@ -143,262 +108,95 @@ ipcMain.handle('run-kokoro', async (_event, text, outFile, voice) => {
   }
 });
 
-ipcMain.handle('run-kokoro-multi', async (_event, text, outFile, voice) => {
+ipcMain.handle('run-kokoro-multi', async (event, text, outFile, voice) => {
+  const chunks = await splitText(text, 300);
+  const results = [];
+  const estimatedMs = estimateProcessingTime(text, 50, 1000);
+  let progress = 0;
+  const progressInterval = setInterval(() => {
+    progress = Math.min(95, progress + Math.random() * 8 + 2);
+    event.sender.send('kokoro-progress-update', {
+      progress: Math.floor(progress),
+      text: `Processing... ${Math.floor(progress)}%`,
+    });
+  }, Math.max(100, estimatedMs / 20));
+
   try {
-    const chunks = await splitText(text, 300); // V10.7-compatible guardrail: keep each inference <= 300 chars
-    const audioBuffers = [];
-
-    // Estimate processing time based on text length for progress updates
-    const estimatedMs = estimateProcessingTime(text, 50, 1000); // ~50ms per word, minimum 1 second
-    let progress = 0;
-
-    // Send progress updates to the renderer
-    const sendProgress = () => {
-      progress = Math.min(95, progress + Math.random() * 8 + 2); // Increase by 2-10% each time
-      _event.sender.send('kokoro-progress-update', {
-        progress: Math.floor(progress),
-        text: `Processing... ${Math.floor(progress)}%`,
-      });
-    };
-    // Start progress updates
-    const progressInterval = setInterval(sendProgress, Math.max(100, estimatedMs / 20));
-
-    const results = [];
+    await ensureKokoroReady();
     for (const chunk of chunks) {
-      // Normalize text for TTS compatibility
       const normalizedChunk = normalizeForTTS(chunk);
-
-      // Skip empty chunks after normalization
-      if (!normalizedChunk || normalizedChunk.trim().length === 0) {
-        console.warn('Skipping empty chunk after normalization');
-        continue;
-      }
-
-      // Runtime v1 serializes inference inside ttsManager; keep chunk processing ordered.
-      const audio = await ttsManager.generateAudio(normalizedChunk, voice);
-      const wav = await audio.toWav();
-      results.push(Buffer.from(wav));
+      if (!normalizedChunk) continue;
+      const wav = await kokoroApi.synthesize({
+        text: normalizedChunk,
+        voice: voice || 'zf_001',
+        port: kokoroService.port,
+      });
+      results.push(wav);
     }
-
-    // Filter out null results (empty chunks)
-    const validResults = results.filter(result => result !== null);
-
-    audioBuffers.push(...validResults);
-    const merged = mergeWavBuffers(audioBuffers);
-
-    // Clear progress interval
-    clearInterval(progressInterval);
-
-    // Use default output path if none is provided
-    if (!outFile || outFile.trim() === '') {
-      console.warn(`No output path provided. Using default: ${defaultOutputPath}`);
-      outFile = defaultOutputPath;
+    if (!results.length) throw new Error('No non-empty text chunks to synthesize.');
+    const merged = mergeWavBuffers(results);
+    if (!outFile || !outFile.trim()) {
+      outFile = path.join(app.getPath('documents'), 'kokoro-output.wav');
     }
-
     fs.writeFileSync(outFile, merged);
-
-    // Save current state
     settingsManager.saveSessionState(text, voice, outFile);
-
+    event.sender.send('kokoro-progress-update', { progress: 100, text: 'Complete' });
     return outFile;
-  } catch (err) {
-    console.error('Kokoro multi-generation failed:', err);
-    throw new Error('Kokoro multi-generation error: ' + err.message, { cause: err });
+  } finally {
+    clearInterval(progressInterval);
   }
 });
 
 ipcMain.handle('preview-voice', async (_event, voice) => {
-  const previewText = 'This is a sample of the selected voice.';
-  // Create secure temporary directory with restricted permissions
+  await ensureKokoroReady();
   const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'kokoro-preview-'), { mode: 0o700 });
-  // Use crypto.randomUUID() for secure temporary filename
-  const tempId = crypto.randomUUID();
-  const outputFile = path.join(tmpdir, `kokoro-voice-preview-${tempId}.wav`);
-
-  settingsManager.set('lastModel', voice);
-
-  const audio = await ttsManager.generatePreview(voice, previewText);
-  await audio.save(outputFile);
+  const outputFile = path.join(tmpdir, `kokoro-voice-preview-${crypto.randomUUID()}.wav`);
+  const wav = await kokoroApi.synthesize({
+    text: '这是所选中文声音的试听。',
+    voice: voice || 'zf_001',
+    port: kokoroService.port,
+  });
+  fs.writeFileSync(outputFile, wav, { mode: 0o600 });
+  settingsManager.set('lastModel', voice || 'zf_001');
   return outputFile;
 });
 
-ipcMain.handle('get-last-settings', async () => {
-  return settingsManager.getLastSettings();
-});
-
-ipcMain.handle('reset-settings', async () => {
-  settingsManager.clear();
-});
+ipcMain.handle('get-last-settings', async () => settingsManager.getLastSettings());
+ipcMain.handle('reset-settings', async () => settingsManager.clear());
 
 ipcMain.handle('read-text-file', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog({
     title: 'Select Text File',
-    // filters: [{ name: 'Text Files', extensions: ['txt'] }],
     filters: [{ name: 'All Files', extensions: ['*'] }],
     properties: ['openFile'],
   });
-  if (canceled || !filePaths[0]) {
-    return null;
-  }
-
+  if (canceled || !filePaths[0]) return null;
   const filePath = filePaths[0];
-
-  if (!isValidTextFile(filePath)) {
-    return { invalid: true, path: filePath };
-  }
-
+  const { isValidTextFile, getFileSize, readTextFile } = require('./scripts/file-utils');
+  if (!isValidTextFile(filePath)) return { invalid: true, path: filePath };
   const fileSize = getFileSize(filePath);
-  if (!fileSize || fileSize > 1024 * 1024) {
-    return { tooLarge: true, path: filePath };
-  } // >1MB
-
+  if (!fileSize || fileSize > 1024 * 1024) return { tooLarge: true, path: filePath };
   const text = readTextFile(filePath);
-  if (!text) {
-    return { error: true, path: filePath };
-  }
-
+  if (!text) return { error: true, path: filePath };
   return { text, path: filePath };
 });
 
 ipcMain.handle('speak-text-file', async (_, filePath, modelPath, outputPath) => {
   return new Promise((resolve, reject) => {
     const piperPath = settingsManager.get('piperPath');
-
     const child = spawn(piperPath, ['--model', modelPath, '--output_file', outputPath]);
-
     fs.createReadStream(filePath).pipe(child.stdin);
-
-    child.on('exit', code => {
-      if (code === 0) {
-        resolve(outputPath);
-      } else {
-        reject(new Error(`Piper exited with code ${code}`));
-      }
-    });
+    child.on('exit', code => code === 0 ? resolve(outputPath) : reject(new Error(`Piper exited with code ${code}`)));
   });
 });
 
 ipcMain.handle('validate-file-for-drag-drop', async (_, file) => {
-  // Use the same validation logic as read-text-file
-  if (!isValidTextFile(file)) {
-    return { valid: false, reason: 'Invalid file type' };
-  }
-
-  // You could also check size here if needed
-  return { valid: true };
+  const { isValidTextFile } = require('./scripts/file-utils');
+  return isValidTextFile(file) ? { valid: true } : { valid: false, reason: 'Invalid file type' };
 });
 
-let currentAbortController = null;
-
-ipcMain.handle('start-kokoro-stream', async (event, text, voice, outputPath) => {
-  try {
-    const tts = await ttsManager.loadTTS();
-    const splitter = new TextSplitterStream();
-    const stream = tts.stream(splitter, { voice });
-
-    // Create secure temporary directory with restricted permissions
-    const tmpdir = fs.mkdtempSync(path.join(os.tmpdir(), 'kokoro-secure-'), { mode: 0o700 });
-    const chunkPaths = [];
-    const audioBuffers = [];
-    let index = 0;
-
-    let streamCancelled = false;
-    let streamPaused = false;
-
-    // Setup cancellation
-    ipcMain.once('cancel-kokoro-stream', () => {
-      streamCancelled = true;
-      splitter.close();
-    });
-
-    ipcMain.once('pause-kokoro-stream', () => {
-      streamPaused = true;
-    });
-
-    ipcMain.once('resume-kokoro-stream', () => {
-      streamPaused = false;
-    });
-
-    // ✅ Create and store the controller
-    currentAbortController = new AbortController();
-    const { signal } = currentAbortController;
-
-    // Tokenize text for streaming
-    const tokens = tokenizeText(text);
-
-    // Stream processor
-    (async () => {
-      try {
-        for await (const { audio } of stream) {
-          if (streamCancelled) {
-            return;
-          }
-
-          if (signal.aborted) {
-            return;
-          }
-
-          // Convert audio to buffer
-          const wavBuffer = Buffer.from(await audio.toWav());
-          // Use crypto.randomUUID() for secure temporary filename
-          const chunkId = crypto.randomUUID();
-          const chunkPath = path.join(tmpdir, `kokoro-chunk-${chunkId}-${index++}.wav`);
-          // Write with secure permissions (owner read/write only)
-          fs.writeFileSync(chunkPath, wavBuffer, { mode: 0o600 });
-
-          // Emit chunk path to renderer
-          event.sender.send('kokoro-chunk-ready', chunkPath);
-
-          chunkPaths.push(chunkPath);
-          audioBuffers.push(wavBuffer);
-
-          // Pause if needed
-          while (streamPaused && !streamCancelled) {
-            await new Promise(resolve => setTimeout(resolve, 100));
-          }
-        }
-      } catch (err) {
-        console.error('Streaming error:', err);
-        event.sender.send('kokoro-error', 'Streaming error: ' + err.message);
-      } finally {
-        currentAbortController = null;
-      }
-
-      // Final merge
-      if (!streamCancelled) {
-        const finalWavBuffer = mergeWavBuffers(audioBuffers);
-        // Use crypto.randomUUID() for secure temporary filename if no output path provided
-        const finalPath =
-          outputPath || path.join(tmpdir, `kokoro-final-${crypto.randomUUID()}.wav`);
-        // Write with secure permissions (owner read/write only)
-        fs.writeFileSync(finalPath, finalWavBuffer, { mode: 0o600 });
-        event.sender.send('kokoro-complete', finalPath);
-      }
-
-      // Clean up temporary directory after use
-      try {
-        if (fs.existsSync(tmpdir)) {
-          fs.rmSync(tmpdir, { recursive: true, force: true });
-        }
-      } catch (cleanupErr) {
-        console.warn('Failed to cleanup temporary directory:', cleanupErr);
-      }
-    })();
-
-    // Feed tokens into the stream with pacing
-    for (const token of tokens) {
-      if (streamCancelled) {
-        break;
-      }
-      if (signal.aborted) {
-        break;
-      }
-      splitter.push(token);
-      await new Promise(resolve => setTimeout(resolve, 10)); // pacing delay
-    }
-    splitter.close(); // close after last token
-  } catch (err) {
-    console.error('Kokoro streaming failed:', err);
-    event.sender.send('kokoro-error', 'Kokoro error: ' + err.message);
-  }
+// Streaming is intentionally not part of Phase 2. Keep the IPC surface explicit.
+ipcMain.handle('start-kokoro-stream', async () => {
+  throw new Error('Kokoro streaming is deferred until the sidecar batch path is validated.');
 });
+ipcMain.handle('cancel-kokoro-stream', async () => false);
