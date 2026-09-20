@@ -57,8 +57,12 @@ jobs:
       - name: Verify packaged assets
         shell: bash
         run: |
-          test -s build/models/Kokoro-82M-v1.1-zh/int8/kokoro-v1.1-zh.int8.onnx
-          test -s build/models/Kokoro-82M-v1.1-zh/int8/voices-v1.1-zh.bin
+          test -s build/models/Kokoro-82M-v1.1-zh/runtime/voices-v1.1-zh.bin
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            test -s build/models/Kokoro-82M-v1.1-zh/runtime/kokoro-v1.1-zh.fp16.onnx
+          else
+            test -s build/models/Kokoro-82M-v1.1-zh/runtime/kokoro-v1.1-zh.int8.onnx
+          fi
 
       - name: Smoke-test packaged PyInstaller sidecar
         run: npm run test:tts-runtime-v2:packaged
