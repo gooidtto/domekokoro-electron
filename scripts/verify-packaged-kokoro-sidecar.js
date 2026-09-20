@@ -7,7 +7,7 @@ const { spawn } = require('child_process');
 const root = path.resolve(__dirname, '..');
 const port = Number(process.env.KOKORO_SMOKE_PORT || 17862);
 const sidecarDir = path.join(root, 'build', 'sidecar', 'kokoro-sidecar');
-const modelDir = path.join(root, 'build', 'models', 'Kokoro-82M-v1.1-zh', 'int8');
+const modelDir = path.join(root, 'build', 'models', 'Kokoro-82M-v1.1-zh', 'runtime');
 const executable = process.platform === 'win32'
   ? path.join(sidecarDir, 'kokoro-sidecar.exe')
   : path.join(sidecarDir, 'kokoro-sidecar');
@@ -81,7 +81,8 @@ async function stopProcess(child) {
 }
 
 async function main() {
-  const model = path.join(modelDir, 'kokoro-v1.1-zh.int8.onnx');
+  const modelName = fs.readdirSync(modelDir).find(name => /^kokoro-v1\.1-zh\.(?:int8|fp16)\.onnx$/.test(name));
+  const model = modelName ? path.join(modelDir, modelName) : '';
   const voices = path.join(modelDir, 'voices-v1.1-zh.bin');
   for (const file of [executable, model, voices]) {
     if (!fs.existsSync(file) || fs.statSync(file).size === 0) {
