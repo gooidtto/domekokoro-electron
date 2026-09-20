@@ -24,7 +24,7 @@ function request(method, pathname, body) {
         'Content-Type': 'application/json',
         'Content-Length': payload.length,
       } : undefined,
-      timeout: 5000,
+      timeout: 120000,
     }, res => {
       const chunks = [];
       res.on('data', chunk => chunks.push(chunk));
