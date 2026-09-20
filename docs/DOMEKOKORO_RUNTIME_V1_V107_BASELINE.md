@@ -86,3 +86,40 @@ Therefore this branch is:
 **V10.7 production memory/concurrency baseline applied to the existing Electron runtime**, not yet the final Chinese `kokoro-js-zh@2.1.7` engine migration.
 
 The next isolated step is to add the Chinese runtime as a separate engine implementation, pin its dependency graph, and run real synthesis tests before making it the default engine.
+
+
+## 2026-09-20 continuation: Chinese runtime isolated integration
+
+The runtime-v1 branch now contains an isolated Chinese Kokoro implementation in
+`scripts/chinese-kokoro-runtime.js`.
+
+Target runtime:
+- `kokoro-js-zh@2.1.7`
+- `@huggingface/transformers@3.8.1`
+- `onnxruntime-node@1.29.0`
+- `onnx-community/Kokoro-82M-v1.0-ONNX`
+- `q8`
+- CPU inference
+- 8 Chinese voices
+- 300-character per-inference guardrail
+- serialized single-instance inference
+
+The existing `kokoro-js@1.2.1` runtime remains the current default path. The
+Chinese runtime is exposed through separate IPC handlers so it can be validated
+without replacing the existing engine:
+
+- `initialize-kokoro-zh`
+- `list-kokoro-zh-voices`
+- `run-kokoro-zh`
+- `get-kokoro-zh-config`
+
+This is deliberate: the Chinese engine must pass real initialization,
+voice-asset validation, Chinese synthesis, WAV validation, and memory/repeat
+tests before becoming the default runtime.
+
+Note: the repository package manifest has been updated with the three V10.7
+Chinese runtime dependencies, but the lockfile has not yet been regenerated in
+this environment because external package registry access is unavailable.
+Do not treat a clean `npm ci` result as verified until the lockfile is
+regenerated and the dependency tree is installed in a network-enabled build
+environment.
