@@ -22,7 +22,7 @@ class KokoroServiceManager {
   }
 
   getModelRoot() {
-    if (this.packaged) return path.join(process.resourcesPath, 'models', 'Kokoro-82M-v1.1-zh', 'int8');
+    if (this.packaged) return path.join(process.resourcesPath, 'models', 'Kokoro-82M-v1.1-zh', 'runtime');
     return this.getDefaultModelDir();
   }
 
@@ -35,13 +35,13 @@ class KokoroServiceManager {
   }
 
   getDefaultModelDir() {
-    return path.join(this.projectRoot, 'models', 'Kokoro-82M-v1.1-zh', 'int8');
+    return path.join(this.projectRoot, 'models', 'Kokoro-82M-v1.1-zh', 'runtime');
   }
 
   getAssets() {
     const dir = process.env.KOKORO_MODEL_DIR || this.getModelRoot();
     return {
-      model: process.env.KOKORO_MODEL_PATH || path.join(dir, 'kokoro-v1.1-zh.int8.onnx'),
+      model: process.env.KOKORO_MODEL_PATH || fs.readdirSync(dir).find(name => /^kokoro-v1\.1-zh\.(?:int8|fp16)\.onnx$/.test(name)) && path.join(dir, fs.readdirSync(dir).find(name => /^kokoro-v1\.1-zh\.(?:int8|fp16)\.onnx$/.test(name))),
       voices: process.env.KOKORO_VOICES_PATH || path.join(dir, 'voices-v1.1-zh.bin'),
       config: process.env.KOKORO_CONFIG_PATH || path.join(dir, 'config.json'),
     };
