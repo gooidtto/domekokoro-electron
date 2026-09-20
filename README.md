@@ -413,3 +413,81 @@ This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) 
 ---
 
 **ℹ️ Note:** This application runs entirely locally after the initial model download. No external TTS services or API keys are required.
+
+
+---
+
+## DomeKokoro Runtime V2
+
+The `runtime-v2-kokoro-onnx-v11zh` branch uses a Python `kokoro-onnx` sidecar for Chinese Kokoro v1.1 inference.
+
+### GitHub Actions build
+
+The repository now has a dedicated **Build Desktop App** workflow:
+
+- Linux
+- Windows
+- macOS
+
+The workflow:
+
+1. installs Node.js 22;
+2. installs Python 3.12;
+3. installs the pinned Python TTS dependencies;
+4. downloads the Kokoro v1.1-zh INT8 model and 103-voice bundle from the pinned `model-files-v1.1` release;
+5. packages the Python sidecar with PyInstaller;
+6. embeds the sidecar and model assets into the Electron application;
+7. uploads the resulting platform package as a GitHub Actions artifact.
+
+Model binaries are **not committed to Git**.
+
+Run the workflow manually from GitHub Actions with **Build Desktop App → Run workflow**.
+
+### Local packaged build
+
+A local packaged build requires Python 3.12 and the sidecar dependencies:
+
+```bash
+npm ci
+python -m pip install -r sidecar/kokoro-onnx/requirements.txt pyinstaller
+npm run prepare:distribution
+npm run pack
+```
+
+The generated Electron package contains:
+
+```
+resources/
+├── kokoro-sidecar/
+└── models/
+    └── Kokoro-82M-v1.1-zh/
+        └── int8/
+            ├── kokoro-v1.1-zh.int8.onnx
+            └── voices-v1.1-zh.bin
+```
+
+The packaged application no longer requires a separate system Python installation to start the Kokoro sidecar.
+
+### Runtime API
+
+DomeKokoro exposes the local OpenAI-compatible endpoint:
+
+```
+POST http://127.0.0.1:17860/v1/audio/speech
+```
+
+Example:
+
+```json
+{
+  "model": "kokoro-v1.1-zh",
+  "input": "这是本地中文语音测试。",
+  "voice": "zf_001",
+  "speed": 1.0,
+  "response_format": "wav"
+}
+```
+
+Each inference is limited to 300 characters. Long text is split and synthesized sequentially to keep the single-instance memory-safety design.
+
+The official `model-files-v1.1` release provides the v1.1-zh INT8 model at about 114 MB and the `voices-v1.1-zh.bin` bundle at about 53 MB, containing 103 voices. citeturn1search0
