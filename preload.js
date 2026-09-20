@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('kokoroAPI', {
   getLastSettings: () => ipcRenderer.invoke('get-last-settings'),
   initializeKokoro: () => ipcRenderer.invoke('initialize-kokoro'),
   listVoices: () => ipcRenderer.invoke('list-kokoro-voices'),
+  getKokoroConfig: () => ipcRenderer.invoke('get-kokoro-config'),
   resetSettings: () => ipcRenderer.invoke('reset-settings'),
   readTextFile: () => ipcRenderer.invoke('read-text-file'),
   speakShortText: (text, outputPath, voice) =>
