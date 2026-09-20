@@ -6,6 +6,7 @@ const { createRequire } = require('module');
 const requireFromHere = createRequire(__filename);
 
 const REMOTE_MODEL_ID = 'onnx-community/Kokoro-82M-v1.1-zh-ONNX';
+const DEFAULT_MODEL_NAME = 'Kokoro-82M-v1.1-zh-ONNX';
 const KOKORO_DTYPE = 'q8';
 const MAX_SYNTHESIS_TEXT = 300;
 const HF_ENDPOINT = process.env.KOKORO_HF_ENDPOINT || 'https://hf-mirror.com';
@@ -23,10 +24,12 @@ const CHINESE_VOICES = [
 
 const VOICE_FILES = CHINESE_VOICES.map(voice => `${voice}.bin`);
 const LOCAL_MODEL_FILENAMES = [
-  'kokoro-v1.1-zh.int8.onnx',
-  'kokoro-v1.0.int8.onnx',
   'onnx/model_int8.onnx',
   'onnx/model_quantized.onnx',
+  'onnx/model_fp16.onnx',
+  'onnx/model.onnx',
+  'kokoro-v1.1-zh.int8.onnx',
+  'kokoro-v1.0.int8.onnx',
 ];
 
 function packageDir() {
@@ -36,13 +39,13 @@ function packageDir() {
 function voiceDir() {
   return process.env.KOKORO_VOICES_DIR
     ? path.resolve(process.env.KOKORO_VOICES_DIR)
-    : path.join(packageDir(), 'voices');
+    : path.join(modelDir(), 'voices');
 }
 
 function modelDir() {
   const configured = process.env.KOKORO_MODEL_DIR;
   if (configured) return path.resolve(configured);
-  return path.join(process.cwd(), 'models', 'kokoro-v1.1-zh');
+  return path.join(process.cwd(), 'models', DEFAULT_MODEL_NAME);
 }
 
 function findLocalModelFile(dir = modelDir()) {
@@ -73,7 +76,8 @@ function localModelStatus() {
     config: fs.existsSync(path.join(dir, 'config.json')),
     tokenizer: fs.existsSync(path.join(dir, 'tokenizer.json')),
     tokenizerConfig: fs.existsSync(path.join(dir, 'tokenizer_config.json')),
-    ready: localModelAvailable(),
+    voices: listLocalVoices(),
+    ready: Boolean(modelFile && fs.existsSync(path.join(dir, 'config.json')) && fs.existsSync(path.join(dir, 'tokenizer.json'))),
   };
 }
 
@@ -200,7 +204,8 @@ class ChineseKokoroRuntime {
         new Error(`TTS text is too long (maximum ${MAX_SYNTHESIS_TEXT} characters per synthesis)`)
       );
     }
-    if (!CHINESE_VOICES.includes(voice)) {
+    const availableVoices = this.getVoices();
+    if (!availableVoices.includes(voice)) {
       return Promise.reject(new Error(`Unsupported Chinese Kokoro voice: ${voice}`));
     }
 
@@ -219,7 +224,8 @@ class ChineseKokoroRuntime {
   }
 
   getVoices() {
-    return [...CHINESE_VOICES];
+    const localVoices = listLocalVoices();
+    return localVoices.length ? localVoices : [...CHINESE_VOICES];
   }
 
   getConfig() {
@@ -235,9 +241,10 @@ class ChineseKokoroRuntime {
       localModelDir: local.dir,
       localModelFile: local.modelFile,
       localModelAvailable: local.ready,
-      localModelRequirements: ['config.json', 'tokenizer.json', 'tokenizer_config.json', 'onnx model'],
+      localModelRequirements: ['config.json', 'tokenizer.json', 'tokenizer_config.json', 'onnx/model_int8.onnx (or another supported ONNX variant)', 'voices/*.bin'],
       voicesDir: voiceDir(),
       voicesReady: voicesReady(),
+      availableVoices: this.getVoices(),
       loadedSource: this.source,
     };
   }
@@ -250,7 +257,13 @@ class ChineseKokoroRuntime {
 
 function voicesReady() {
   const dir = voiceDir();
-  return VOICE_FILES.every(file => fs.existsSync(path.join(dir, file)));
+  return fs.existsSync(dir) && fs.readdirSync(dir).some(name => name.endsWith('.bin'));
+}
+
+function listLocalVoices() {
+  const dir = voiceDir();
+  if (!fs.existsSync(dir)) return [];
+  return fs.readdirSync(dir).filter(name => name.endsWith('.bin')).map(name => name.slice(0, -4)).sort();
 }
 
 const chineseKokoroRuntime = new ChineseKokoroRuntime();
