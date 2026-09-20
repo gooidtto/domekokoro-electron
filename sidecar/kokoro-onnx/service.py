@@ -110,7 +110,7 @@ class Handler(BaseHTTPRequestHandler):
                     "status": "ok",
                     "engine": "kokoro-onnx",
                     "model": "Kokoro-82M-v1.1-zh",
-                    "dtype": "int8",
+                    "dtype": "fp16" if ".fp16." in self.service.model_path.name else "int8",
                     "device": "cpu",
                     "sample_rate": SAMPLE_RATE,
                     "voices": len(voices),
