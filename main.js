@@ -124,24 +124,22 @@ ipcMain.handle('run-kokoro-multi', async (_event, text, outFile, voice) => {
     // Start progress updates
     const progressInterval = setInterval(sendProgress, Math.max(100, estimatedMs / 20));
 
-    const results = await Promise.all(
-      chunks.map((chunk, _i) =>
-        limit(async () => {
-          // Normalize text for TTS compatibility
-          const normalizedChunk = normalizeForTTS(chunk);
+    const results = [];
+    for (const chunk of chunks) {
+      // Normalize text for TTS compatibility
+      const normalizedChunk = normalizeForTTS(chunk);
 
-          // Skip empty chunks after normalization
-          if (!normalizedChunk || normalizedChunk.trim().length === 0) {
-            console.warn('Skipping empty chunk after normalization');
-            return null;
-          }
+      // Skip empty chunks after normalization
+      if (!normalizedChunk || normalizedChunk.trim().length === 0) {
+        console.warn('Skipping empty chunk after normalization');
+        continue;
+      }
 
-          // Runtime v1 serializes inference inside ttsManager; do not create parallel model instances.\n          const audio = await ttsManager.generateAudio(normalizedChunk, voice);
-          const wav = await audio.toWav();
-          return Buffer.from(wav);
-        })
-      )
-    );
+      // Runtime v1 serializes inference inside ttsManager; keep chunk processing ordered.
+      const audio = await ttsManager.generateAudio(normalizedChunk, voice);
+      const wav = await audio.toWav();
+      results.push(Buffer.from(wav));
+    }
 
     // Filter out null results (empty chunks)
     const validResults = results.filter(result => result !== null);
