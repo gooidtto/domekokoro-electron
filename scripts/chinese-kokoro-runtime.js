@@ -253,7 +253,7 @@ class ChineseKokoroRuntime {
       localModelDir: local.dir,
       localModelFile: local.modelFile,
       localModelAvailable: local.ready,
-      localModelRequirements: ['config.json', 'tokenizer.json', 'tokenizer_config.json', 'onnx/model_int8.onnx (or another supported ONNX variant)', 'voices/*.bin' (individual Transformers.js voice files; voices-v1.1-zh.bin is a kokoro-onnx bundle and is not consumed directly by kokoro-js-zh)],
+      localModelRequirements: ['config.json', 'tokenizer.json', 'tokenizer_config.json', 'onnx/model_int8.onnx (or another supported ONNX variant)', 'voices/*.bin (individual Transformers.js voice files; voices-v1.1-zh.bin is a separate kokoro-onnx bundle and is not consumed directly by kokoro-js-zh)'],
       voicesDir: voiceDir(),
       voicesReady: voicesReady(),
       availableVoices: this.getVoices(),
