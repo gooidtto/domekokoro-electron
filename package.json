@@ -50,7 +50,8 @@
     "p-limit": "^7.3.0",
     "kokoro-js-zh": "2.1.7",
     "@huggingface/transformers": "3.8.1",
-    "onnxruntime-node": "1.29.0"
+    "onnxruntime-node": "1.29.0",
+    "espeak-ng": "1.0.2"
   },
   "devDependencies": {
     "@babel/core": "^7.29.0",
