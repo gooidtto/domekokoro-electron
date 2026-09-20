@@ -176,10 +176,11 @@
         ]
       },
       {
-        "from": "build/models/Kokoro-82M-v1.1-zh/int8",
-        "to": "models/Kokoro-82M-v1.1-zh/int8",
+        "from": "build/models/Kokoro-82M-v1.1-zh/runtime",
+        "to": "models/Kokoro-82M-v1.1-zh/runtime",
         "filter": [
           "kokoro-v1.1-zh.int8.onnx",
+          "kokoro-v1.1-zh.fp16.onnx",
           "voices-v1.1-zh.bin"
         ]
       }
