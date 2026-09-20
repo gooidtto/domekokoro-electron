@@ -123,3 +123,45 @@ this environment because external package registry access is unavailable.
 Do not treat a clean `npm ci` result as verified until the lockfile is
 regenerated and the dependency tree is installed in a network-enabled build
 environment.
+
+
+## 2026-09-20 continuation: local ONNX model loading
+
+The Chinese runtime now supports a local-first ONNX model directory.
+
+Set:
+
+```bash
+KOKORO_USE_LOCAL_MODEL=1
+KOKORO_MODEL_DIR=/absolute/path/to/models/kokoro-v1.1-zh
+```
+
+The directory must contain the Transformers.js model metadata plus the ONNX file:
+
+```text
+kokoro-v1.1-zh/
+├── config.json
+├── tokenizer.json
+├── tokenizer_config.json
+└── onnx/
+    └── model_int8.onnx
+```
+
+The loader also recognizes the supplied filenames:
+
+- `kokoro-v1.1-zh.int8.onnx`
+- `kokoro-v1.0.int8.onnx`
+- `onnx/model_int8.onnx`
+- `onnx/model_quantized.onnx`
+
+However, an ONNX file by itself is not a complete Transformers.js model package. `config.json` and `tokenizer.json` are required for local loading. The v1.1-zh Transformers.js repository layout contains those metadata files alongside the ONNX variants.
+
+When `KOKORO_USE_LOCAL_MODEL=1` is set, a missing/incomplete local model fails explicitly instead of silently downloading another model. Remote fallback can only be enabled explicitly with:
+
+```bash
+KOKORO_ALLOW_REMOTE_FALLBACK=1
+```
+
+The existing remote path remains available when no usable local model is detected.
+
+The two user-supplied ONNX files are intentionally not committed to GitHub: each is over 100 MB, so they should remain external/local model assets unless Git LFS is deliberately introduced.
