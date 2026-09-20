@@ -1,5 +1,5 @@
 # PyInstaller specification for the standalone Kokoro sidecar.
-from PyInstaller.utils.hooks import collect_all, collect_submodules
+from pathlib import Path\n\nfrom PyInstaller.utils.hooks import collect_all, collect_submodules\n\nROOT = Path(__file__).resolve().parent
 
 datas = []
 binaries = []
@@ -23,8 +23,8 @@ for package in [
 hiddenimports += collect_submodules("misaki")
 
 a = Analysis(
-    ["app.py"],
-    pathex=["."],
+    [str(ROOT / "app.py")],
+    pathex=[str(ROOT)],
     binaries=binaries,
     datas=datas,
     hiddenimports=hiddenimports,
