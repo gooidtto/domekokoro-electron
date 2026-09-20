@@ -79,3 +79,7 @@ opencode.json
 # Development documentation (internal use)
 docs/development/
 app_output.log
+
+# Local Kokoro model assets (distributed separately)
+models/Kokoro-82M-v1.1-zh/**/*.onnx
+models/Kokoro-82M-v1.1-zh/**/*.bin
